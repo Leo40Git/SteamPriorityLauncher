@@ -14,4 +14,21 @@ If you don't know the name of the game's main EXE, run the game normally, open T
 7. **You're done!**
 
 ## Options
-Too see the launcher's options, simply run it using your preferred command line with no options.
+To see the launcher's options, simply run it using your preferred command line with no options.
+
+- `-gameID` - The Steam ID of the game you want to launch. *Required.*
+- `-gameExe` - The name of the game's main EXE. *Required.*
+- `-priority` - The game process' new priority.  
+Valid values are:
+  - L - Low/Idle*
+  - B - Below Normal*
+  - N - Normal
+  - A - Above Normal
+  - H - High*
+  - R - Realtime* (requires admin privileges, may cause system instability!)
+
+  (* - not recommended)  
+If this option is not specified, the priority will be set to A (Above Normal).
+- `-affinity` - What cores the game process will be allowed to run on.  
+This option takes a list of cores, where 0 is core #1.  
+If this option is not specified, the process will be allowed to run on all cores.
