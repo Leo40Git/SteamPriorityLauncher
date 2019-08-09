@@ -11,7 +11,7 @@
 #include "tlhelp32.h"
 #include "psapi.h"
 
-constexpr auto VERSION = "1.0";
+constexpr auto VERSION = "1.1";
 
 constexpr auto PRI_COUNT = 6;
 constexpr auto PRI_DEFAULT = 3; // A (Above Normal)
@@ -20,7 +20,7 @@ const char* PRI_DETAILS[] = { "Low/Idle*", "Below Normal*", "Normal", "Above Nor
 const DWORD PRI_VALUES[] = { IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, ABOVE_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS };
 
 enum ParseState {
-	Default, NextIsPriValue, NextIsGameID, NextIsGameExe
+	Default, NextIsPriValue, NextIsGameID, NextIsGameExe, NextIsAffinity
 };
 
 void printError(const char* errSrc, DWORD err) {
@@ -52,21 +52,34 @@ int main(int argc, char* argv[])
 	printf("Steam Priority Launcher v%s\nbuilt on %s at %s\n\n", VERSION, __DATE__, __TIME__);
 
 	DWORD priValue = PRI_VALUES[PRI_DEFAULT];
-	char gameID[MAX_PATH] = "";
-	char gameExe[0x1001] = "";
-	bool gameIDSet = false, gameExeSet = false;
+	DWORD affMask = 0, affMaskSystem = 0;
+	char gameID[0x101] = "";
+	char gameExe[MAX_PATH] = "";
+	char affMaskBuf[0x101] = "";
+	bool gameIDSet = false, gameExeSet = false, affMaskSet = false;
+
+	// get system affinity mask
+	{
+		DWORD useless = 0; // we don't need our affinity mask
+		GetProcessAffinityMask(GetCurrentProcess(), &useless, &affMaskSystem);
+	}
 
 	if (argc == 1) {
-		printf("usage: %s -priority <priority> -gameID <steam ID of game to launch> -gameExe <name of game EXE>\n", argv[0]);
+		printf("usage: %s -priority <priority> -gameID <steam ID of game to launch> -gameExe <name of game EXE> -affinity <list of cores>\n", argv[0]);
+		printf("Only the -gameID and -gameExe options are required.\n");
 		printf("Valid values for <priority> are:\n");
 		for (int i = 0; i < PRI_COUNT; i++)
 			printf("  %s - %s\n", PRI_NAMES[i], PRI_DETAILS[i]);
 		printf("  (* - not recommended)\n");
 		printf("If the priority parameter is not specified, it'll default to %s.\n", PRI_NAMES[PRI_DEFAULT]);
+		printf("<list of cores> - First core is 0, not 1. Separated by semicolons. Only recognizes decimal format.\n");
+		printf("If you have more than 64 cores, each entry defines a group of cores, rather than one.\n");
+		printf("(but let's be real, if you have a machine with >64 cores, it's probably not for gaming)\n");
 		return 0;
 	}
 
 	ParseState ps = Default;
+	char *ptr = NULL, *ptr_next = NULL;
 	for (int i = 1; i < argc; i++) {
 		switch (ps) {
 		case NextIsPriValue:
@@ -95,6 +108,20 @@ int main(int argc, char* argv[])
 			strcpy_s(gameExe, argv[i]);
 			ps = Default;
 			break;
+		case NextIsAffinity:
+			affMaskSet = true;
+			ZeroMemory(affMaskBuf, sizeof(affMaskBuf));
+			strcpy_s(affMaskBuf, argv[i]);
+			ptr = strtok_s(affMaskBuf, ";", &ptr_next);
+			while (ptr) {
+				DWORD affBit = strtoul(ptr, NULL, 10);
+				affMask |= 1 << affBit;
+				ptr = strtok_s(NULL, ";", &ptr_next);
+			}
+			// AND affinity mask and system affinity mask, since the former has to be a subset of the latter
+			affMask &= affMaskSystem;
+			ps = Default;
+			break;
 		case Default:
 		default:
 			if (strcmp(argv[i], "-priority") == 0) {
@@ -112,8 +139,32 @@ int main(int argc, char* argv[])
 				ps = NextIsGameExe;
 				continue;
 			}
+			if (strcmp(argv[i], "-affinity") == 0) {
+				// next "parameter" is actually our core affinity list
+				ps = NextIsAffinity;
+				continue;
+			}
+			printf("WARNING: unknown option \"%s\"\n", argv[i]);
 			break;
 		}
+	}
+
+	// quit if we don't have a required parameter
+	if (!gameIDSet) {
+		MessageBeep(MB_ICONERROR);
+		printf("ERROR: game ID not set!\n");
+		printf("please specify the -gameID option.\n");
+		printf("press any key to exit...\n");
+		system("pause>nul");
+		return -1;
+	}
+	if (!gameExeSet) {
+		MessageBeep(MB_ICONERROR);
+		printf("ERROR: game EXE not set!\n");
+		printf("please specify the -gameExe option.\n");
+		printf("press any key to exit...\n");
+		system("pause>nul");
+		return -1;
 	}
 
 	// create steam browser protocl command
@@ -201,6 +252,16 @@ int main(int argc, char* argv[])
 		printError("SetPriorityClass failed", err);
 		CloseHandle(hProc);
 		return -1;
+	}
+
+	// oh, and set affinity too I guess
+	if (affMaskSet) {
+		if (!SetProcessAffinityMask(hProc, affMask)) {
+			DWORD err = GetLastError();
+			printError("SetProcessAffinityMask failed", err);
+			CloseHandle(hProc);
+			return -1;
+		}
 	}
 
 	CloseHandle(hProc);
