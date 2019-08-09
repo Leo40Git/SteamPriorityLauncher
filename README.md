@@ -12,3 +12,6 @@ If you don't know the name of the game's main EXE, run the game normally, open T
 5. Optionally, rename the shortcut and give it a proper icon.
 6. Select "OK".
 7. **You're done!**
+
+## Options
+Too see the launcher's options, simply run it using your preferred command line with no options.
