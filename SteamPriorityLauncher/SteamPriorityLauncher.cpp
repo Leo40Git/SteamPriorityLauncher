@@ -185,7 +185,7 @@ int main(int argc, char* argv[])
 
 	// convert EXE name to TCHAR*
 	USES_CONVERSION;
-	TCHAR* gameExeT = A2W(gameExe);
+	TCHAR* gameExeT = A2T(gameExe);
 
 	// setup to loop through process snapshot
 	HINSTANCE hInst = GetModuleHandle(NULL);
