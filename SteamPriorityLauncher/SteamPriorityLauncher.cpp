@@ -11,7 +11,7 @@
 #include "tlhelp32.h"
 #include "psapi.h"
 
-constexpr auto VERSION = "1.1";
+constexpr auto VERSION = "1.2";
 
 constexpr auto PRI_COUNT = 6;
 constexpr auto PRI_DEFAULT = 3; // A (Above Normal)
@@ -49,7 +49,7 @@ void printError(const char* errSrc, DWORD err) {
 
 int main(int argc, char* argv[])
 {
-	printf("Steam Priority Launcher v%s\nbuilt on %s at %s\n\n", VERSION, __DATE__, __TIME__);
+	printf("Steam Priority Launcher v%s by ADudeCalledLeo/Leo40Git\nbuilt on %s at %s\nhttps://github.com/Leo40Git/SteamPriorityWrapper\n\n", VERSION, __DATE__, __TIME__);
 
 	DWORD priValue = PRI_VALUES[PRI_DEFAULT];
 	DWORD affMask = 0, affMaskSystem = 0;
@@ -178,93 +178,88 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	// wait for a bit
-	Sleep(2000);
+	printf("SteamPriorityLauncher will now wait for a process of \"%s\" to launch.\n", gameExe);
+	printf("If, for some reason, the game fails to launch, you can terminate the launcher by pressing Ctrl + C.\n");
 
 	// TIME TO SEARCH FOR THE GAME EXE, YAY
+	HANDLE hGameProc = NULL;
+	bool match = false;
 
 	// convert EXE name to TCHAR*
 	USES_CONVERSION;
+#pragma warning( disable : 6255 )
 	TCHAR* gameExeT = A2T(gameExe);
+#pragma warning( default : 6255 )
 
-	// setup to loop through process snapshot
-	HINSTANCE hInst = GetModuleHandle(NULL);
-	HANDLE hSnap = INVALID_HANDLE_VALUE;
-	PROCESSENTRY32 pe32;
-	ZeroMemory(&pe32, sizeof(pe32));
-	pe32.dwSize = sizeof(pe32);
-
-	// take that snapshot
-	hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (!hSnap) {
-		DWORD err = GetLastError();
-		printError("CreateToolhelp32Snapshot failed; could not get a snapshot of all processes", err);
-		return -1;
-	}
-
-	// loop through and grab the matching EXE
-	HANDLE hProc = INVALID_HANDLE_VALUE;
-	bool match = false;
-	if (Process32First(hSnap, &pe32)) {
-		do {
-			hProc = OpenProcess(PROCESS_QUERY_INFORMATION, true, pe32.th32ProcessID);
-			// if we can't open the process, continue
-			if (!hProc) {
-				CloseHandle(hProc);
-				hProc = INVALID_HANDLE_VALUE;
-				continue;
-			}
+	while (!match) {
 #ifdef DEBUG
-			_tprintf(_T("checking \"%s\""), pe32.szExeFile);
+		printf("== SEARCH LOOP START! ==");
 #endif
-			// if the EXE names don't match, continue
-			if (StrCmp(pe32.szExeFile, gameExeT) != 0) {
-#ifdef DEBUG
-				printf(": no match\n");
-#endif
-				CloseHandle(hProc);
-				hProc = INVALID_HANDLE_VALUE;
-				continue;
-			}
-			// we got a match! open the process and break this loop
-#ifdef DEBUG
-			printf(": it's a match!\n");
-#endif
-			hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_SET_INFORMATION, true, pe32.th32ProcessID);
-			match = true;
-			break;
-		} while (Process32Next(hSnap, &pe32));
-	}
-	CloseHandle(hSnap);
 
-	// if we didn't find the EXE, error out
-	if (!match) {
-		if (hProc) CloseHandle(hProc);
-		printf("ERROR: could not find game EXE \"%s\"\n", gameExe);
-		printf("press any key to exit...\n");
-		system("pause>nul");
-		return -1;
+		// setup to loop through process snapshot
+		HINSTANCE hInst = GetModuleHandle(NULL);
+		HANDLE hSnap = NULL;
+		PROCESSENTRY32 pe32;
+		ZeroMemory(&pe32, sizeof(pe32));
+		pe32.dwSize = sizeof(pe32);
+
+		// take that snapshot
+		hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+		if (!hSnap) {
+			DWORD err = GetLastError();
+			printError("CreateToolhelp32Snapshot failed; could not get a snapshot of all processes", err);
+			return -1;
+		}
+
+		// loop through and grab the matching EXE
+		if (Process32First(hSnap, &pe32)) {
+			do {
+				hGameProc = OpenProcess(PROCESS_QUERY_INFORMATION, true, pe32.th32ProcessID);
+				// if we can't open the process, continue
+				if (!hGameProc)
+					continue;
+				CloseHandle(hGameProc);
+#ifdef DEBUG
+				_tprintf(_T("checking \"%s\": "), pe32.szExeFile);
+#endif
+				// if the EXE names don't match, continue
+				if (StrCmp(pe32.szExeFile, gameExeT) != 0) {
+#ifdef DEBUG
+					printf("no match\n");
+#endif
+					continue;
+				}
+				// we got a match! open the process and break this loop
+#ifdef DEBUG
+				printf("it's a match!\n");
+#endif
+				hGameProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_SET_INFORMATION, true, pe32.th32ProcessID);
+				match = true;
+				break;
+			} while (Process32Next(hSnap, &pe32));
+		}
+		CloseHandle(hSnap);
 	}
 
 	// and finally, set the new priority!
-	if (!SetPriorityClass(hProc, priValue)) {
+	if (!SetPriorityClass(hGameProc, priValue)) {
 		DWORD err = GetLastError();
 		printError("SetPriorityClass failed", err);
-		CloseHandle(hProc);
+		CloseHandle(hGameProc);
 		return -1;
 	}
 
 	// oh, and set affinity too I guess
 	if (affMaskSet) {
-		if (!SetProcessAffinityMask(hProc, affMask)) {
+		if (!SetProcessAffinityMask(hGameProc, affMask)) {
 			DWORD err = GetLastError();
 			printError("SetProcessAffinityMask failed", err);
-			CloseHandle(hProc);
+			CloseHandle(hGameProc);
 			return -1;
 		}
 	}
 
-	CloseHandle(hProc);
+	CloseHandle(hGameProc);
 
 #ifdef DEBUG
 	printf("done.\n");
