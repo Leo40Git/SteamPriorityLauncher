@@ -3,15 +3,15 @@
 
 #include <cstdio>
 
-#define _WIN32_WINNT 0x502
+#define _WIN32_WINNT 0x501 // Windows XP
 #define WIN32_LEAN_AND_MEAN
-#include "windows.h"
+#include "Windows.h"
 #include "atlstr.h"
 #include "shellapi.h"
-#include "tlhelp32.h"
-#include "psapi.h"
+#include "TlHelp32.h"
+#include "Psapi.h"
 
-constexpr auto VERSION = "1.2";
+constexpr auto VERSION = "1.3";
 
 constexpr auto PRI_COUNT = 6;
 constexpr auto PRI_DEFAULT = 3; // A (Above Normal)
@@ -19,12 +19,24 @@ const char* PRI_NAMES[] = { "L", "B", "N", "A", "H", "R" };
 const char* PRI_DETAILS[] = { "Low/Idle*", "Below Normal*", "Normal", "Above Normal", "High*", "Realtime* (requires admin privileges, may cause system instability!)" };
 const DWORD PRI_VALUES[] = { IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, ABOVE_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS };
 
+HWND hwndCon;
+
 enum ParseState {
 	Default, NextIsPriValue, NextIsGameID, NextIsGameExe, NextIsAffinity
 };
 
-void printError(const char* errSrc, DWORD err) {
+void notifyError() {
 	MessageBeep(MB_ICONERROR);
+	FLASHWINFO fwi;
+	ZeroMemory(&fwi, sizeof(fwi));
+	fwi.cbSize = sizeof(fwi);
+	fwi.hwnd = hwndCon;
+	fwi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
+	FlashWindowEx(&fwi);
+}
+
+void printError(const char* errSrc, DWORD err) {
+	notifyError();
 	char* errMsg = NULL;
 	DWORD fmtMsgErr = ERROR_SUCCESS;
 	if (!FormatMessageA(
@@ -49,7 +61,12 @@ void printError(const char* errSrc, DWORD err) {
 
 int main(int argc, char* argv[])
 {
-	printf("Steam Priority Launcher v%s by ADudeCalledLeo/Leo40Git\nbuilt on %s at %s\nhttps://github.com/Leo40Git/SteamPriorityWrapper\n\n", VERSION, __DATE__, __TIME__);
+	printf("SteamPriorityLauncher v%s by ADudeCalledLeo/Leo40Git\n", VERSION);
+	printf("built on %s at %s\n", __DATE__, __TIME__);
+	printf("https://github.com/Leo40Git/SteamPriorityWrapper\n");
+	printf("\n");
+
+	hwndCon = GetConsoleWindow();
 
 	DWORD priValue = PRI_VALUES[PRI_DEFAULT];
 	DWORD affMask = 0, affMaskSystem = 0;
@@ -67,14 +84,17 @@ int main(int argc, char* argv[])
 	if (argc == 1) {
 		printf("usage: %s -priority <priority> -gameID <steam ID of game to launch> -gameExe <name of game EXE> -affinity <list of cores>\n", argv[0]);
 		printf("Only the -gameID and -gameExe options are required.\n");
+		printf("\n");
 		printf("Valid values for <priority> are:\n");
 		for (int i = 0; i < PRI_COUNT; i++)
 			printf("  %s - %s\n", PRI_NAMES[i], PRI_DETAILS[i]);
 		printf("  (* - not recommended)\n");
 		printf("If the priority parameter is not specified, it'll default to %s.\n", PRI_NAMES[PRI_DEFAULT]);
+		printf("\n");
 		printf("<list of cores> - First core is 0, not 1. Separated by semicolons. Only recognizes decimal format.\n");
 		printf("If you have more than 64 cores, each entry defines a group of cores, rather than one.\n");
 		printf("(but let's be real, if you have a machine with >64 cores, it's probably not for gaming)\n");
+		printf("If you don't know what affinity is, you probably don't need to set it.\n");
 		return 0;
 	}
 
@@ -106,6 +126,16 @@ int main(int argc, char* argv[])
 			gameExeSet = true;
 			ZeroMemory(gameExe, sizeof(gameExe));
 			strcpy_s(gameExe, argv[i]);
+#ifdef DEBUG
+			printf("setting gameExe to \"%s\"\n", gameExe);
+#endif
+			// append ".exe" to the game EXE name if it isn't already there
+			ptr = strrchr(gameExe, '.');
+			if (!ptr || strcmp(ptr, ".exe") != 0)
+				strcat_s(gameExe, ".exe");
+#ifdef DEBUG
+			printf("gameExe = \"%s\"\n", gameExe);
+#endif
 			ps = Default;
 			break;
 		case NextIsAffinity:
@@ -114,8 +144,14 @@ int main(int argc, char* argv[])
 			strcpy_s(affMaskBuf, argv[i]);
 			ptr = strtok_s(affMaskBuf, ";", &ptr_next);
 			while (ptr) {
+#ifdef DEBUG
+				printf("got core list entry \"%s\"\n", affMaskBuf);
+#endif
 				DWORD affBit = strtoul(ptr, NULL, 10);
 				affMask |= 1 << affBit;
+#ifdef DEBUG
+				printf("affMask = 0x%X\n", affMask);
+#endif
 				ptr = strtok_s(NULL, ";", &ptr_next);
 			}
 			// AND affinity mask and system affinity mask, since the former has to be a subset of the latter
@@ -151,7 +187,7 @@ int main(int argc, char* argv[])
 
 	// quit if we don't have a required parameter
 	if (!gameIDSet) {
-		MessageBeep(MB_ICONERROR);
+		notifyError();
 		printf("ERROR: game ID not set!\n");
 		printf("please specify the -gameID option.\n");
 		printf("press any key to exit...\n");
@@ -159,15 +195,23 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 	if (!gameExeSet) {
-		MessageBeep(MB_ICONERROR);
-		printf("ERROR: game EXE not set!\n");
+		notifyError();
+		printf("ERROR: game EXE name not set!\n");
 		printf("please specify the -gameExe option.\n");
 		printf("press any key to exit...\n");
 		system("pause>nul");
 		return -1;
 	}
+	// also quit if we somehow got an affinity mask that specifies 0 cores
+	if (affMaskSet && affMask == 0) {
+		notifyError();
+		printf("ERROR: -affinity specified with no cores!\n");
+		printf("press any key to exit...\n");
+		system("pause>nul");
+		return -1;
+	}
 
-	// create steam browser protocl command
+	// create steam browser protocol command
 	char steamCmd[0x100 + 13] = "steam://run/";
 	strcat_s(steamCmd, gameID);
 
@@ -261,8 +305,8 @@ int main(int argc, char* argv[])
 
 	CloseHandle(hGameProc);
 
+	printf("Successfully set process attributes.\n");
 #ifdef DEBUG
-	printf("done.\n");
 	printf("press any key to exit...\n");
 	system("pause>nul");
 #endif
