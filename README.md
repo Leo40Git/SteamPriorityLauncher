@@ -30,5 +30,9 @@ Valid values are:
   (* - not recommended)  
 If this option is not specified, the priority will be set to A (Above Normal).
 - `-affinity` - What cores the game process will be allowed to run on.  
-This option takes a list of cores, where 0 is core #1.  
-If this option is not specified, the process will be allowed to run on all cores.
+This option takes a list of cores, where 0 is core #1. Every number in the list is separated by a semicolon (`;`).  
+If this option is not specified, the process will be allowed to run on all cores.  
+Entries that aren't valid decimal numbers are evaluated to 0.  
+Invalid entries (I.E selecting core 4 [actually 5] on a quad-core processor) are ignored.  
+If the given core list evaluates to nothing, the launcher will error out.  
+You won't need to set this option in most cases.  
