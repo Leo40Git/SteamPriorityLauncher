@@ -10,7 +10,9 @@ Launches a Steam game, then sets its priority.
 `-gameID <Steam game ID> -gameExe <name of the game's main EXE>`  
 If you don't know the name of the game's main EXE, run the game normally, open Task Manager, and look for the game in the list. Then, right-click on it and select "Properties". You should see the EXE name in the first textbox.  
 Example:  
-![Example Image](https://github.com/Leo40Git/SteamPriorityLauncher/raw/master/example.png)
+![Example Image](https://github.com/Leo40Git/SteamPriorityLauncher/raw/master/example.png)  
+Contents of "Target": `SteamPriorityLauncher.exe -gameID 440 -gameExe hl2.exe -priority A`  
+This will launch [Team Fortress 2](https://store.steampowered.com/app/440) with priority "Above Normal".
 5. Optionally, rename the shortcut and give it a proper icon.
 6. Select "OK".
 7. **You're done!**
@@ -18,9 +20,14 @@ Example:
 ## Options
 To see the launcher's options, simply run it using your preferred command line with no options.
 
-- `-gameID` - The Steam ID of the game you want to launch. *Required.*
-- `-gameExe` - The name of the game's main EXE. *Required.*
-- `-priority` - The game process' new priority.  
+### `-gameID`
+The Steam ID of the game you want to launch. *Required.*
+
+### `-gameExe`
+The name of the game's main EXE. *Required.*
+
+### `-priority`
+The game process' new priority.  
 Valid values are:
   - L - Low/Idle*
   - B - Below Normal*
@@ -31,7 +38,9 @@ Valid values are:
 
   (* - not recommended)  
 If this option is not specified, the priority will be set to A (Above Normal).
-- `-affinity` - What cores the game process will be allowed to run on.  
+
+### `-affinity`
+What cores the game process will be allowed to run on.  
 This option takes a list of cores, where 0 is core #1. Every number in the list is separated by a semicolon (`;`).  
 If this option is not specified, the process will be allowed to run on all cores.  
 Entries that aren't valid decimal numbers are evaluated to 0.  
