@@ -8,7 +8,9 @@ Launches a Steam game, then sets its priority.
 3. Right-click on the newly created shortcut, and then select "Properties".
 4. In the "Target" textbox, add the following:  
 `-gameID <Steam game ID> -gameExe <name of the game's main EXE>`  
-If you don't know the name of the game's main EXE, run the game normally, open Task Manager, and look for the game in the list. Then, right-click on it and select "Properties". You should see the EXE name in the first textbox.
+If you don't know the name of the game's main EXE, run the game normally, open Task Manager, and look for the game in the list. Then, right-click on it and select "Properties". You should see the EXE name in the first textbox.  
+Example:  
+![Example Image](https://github.com/Leo40Git/SteamPriorityLauncher/raw/master/example.png)
 5. Optionally, rename the shortcut and give it a proper icon.
 6. Select "OK".
 7. **You're done!**
