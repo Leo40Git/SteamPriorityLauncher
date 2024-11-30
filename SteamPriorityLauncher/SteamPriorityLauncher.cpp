@@ -69,20 +69,23 @@ int main(int argc, char* argv[])
 	hwndCon = GetConsoleWindow();
 
 	DWORD priValue = PRI_VALUES[PRI_DEFAULT];
-	DWORD affMask = 0, affMaskSystem = 0;
+	DWORD_PTR affMask = 0, affMaskSystem = 0;
 	char gameID[0x101] = "";
 	char gameExe[MAX_PATH] = "";
 	char affMaskBuf[0x101] = "";
 	bool gameIDSet = false, gameExeSet = false, affMaskSet = false;
 
-	// get system affinity mask
+	// Get system affinity mask
 	{
-		DWORD useless = 0; // we don't need our affinity mask
-		GetProcessAffinityMask(GetCurrentProcess(), &useless, &affMaskSystem);
+		DWORD_PTR useless = 0; // we don't need our affinity mask
+		if (!GetProcessAffinityMask(GetCurrentProcess(), &useless, &affMaskSystem)) {
+			DWORD err = GetLastError();
+			printError("GetProcessAffinityMask failed", err);
+			return -1;
+		}
 	}
-
 	if (argc == 1) {
-		printf("usage: %s -priority <priority> -gameID <steam ID of game to launch> -gameExe <name of game EXE> -affinity <list of cores>\n", argv[0]);
+		printf("usage: %s -priority <priority> -gameID <steam ID of the game to launch> -gameExe <name of the game's EXE> -affinity <list of cores>\n", argv[0]);
 		printf("Only the -gameID and -gameExe options are required.\n");
 		printf("\n");
 		printf("Valid values for <priority> are:\n");
@@ -147,7 +150,10 @@ int main(int argc, char* argv[])
 #ifdef DEBUG
 				printf("got core list entry \"%s\"\n", affMaskBuf);
 #endif
-				DWORD affBit = strtoul(ptr, NULL, 10);
+				// Get system's maximum number of valid affinity bits (based on the architecture)
+				size_t maxBits = sizeof(DWORD_PTR) * 8; // This will be 32 on 32-bit and 64 on 64-bit systems
+
+				DWORD_PTR affBit = strtoul(ptr, NULL, 10);
 				affMask |= 1 << affBit;
 #ifdef DEBUG
 				printf("affMask = 0x%X\n", affMask);
