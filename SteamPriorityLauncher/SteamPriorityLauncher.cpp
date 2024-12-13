@@ -224,8 +224,8 @@ int main(int argc, char* argv[])
 	strcat_s(steamCmd, gameID);
 
 	// run the command
-	int errcode = 0;
-	if ((errcode = (int)ShellExecuteA(NULL, "open", steamCmd, NULL, NULL, SW_SHOW)) <= 32) {
+	DWORD errcode = 0;
+	if ((errcode = reinterpret_cast<DWORD>(ShellExecuteA(NULL, "open", steamCmd, NULL, NULL, SW_SHOW))) <= 32) {
 		printError("ShellExecuteA failed", errcode);
 		return EXIT_FAILURE;
 	}
