@@ -11,8 +11,9 @@ Launches a Steam game, then sets its priority.
 If you don't know the name of the game's main EXE, run the game normally, open Task Manager, and look for the game in the list. Then, right-click on it and select "Properties". You should see the EXE name in the first textbox.  
 Example:  
 ![Example Image](https://github.com/Leo40Git/SteamPriorityLauncher/raw/master/example.png)  
-Contents of "Target": `SteamPriorityLauncher.exe -gameID 440 -gameExe tf2.exe -priority A`  
-This will launch [Team Fortress 2 (440)](https://store.steampowered.com/app/440) with priority "Above Normal".
+Contents of "Target": `SteamPriorityLauncher.exe -gameID 440 -gameExe tf.exe -priority A`  
+This will launch [Team Fortress 2 (440)](https://store.steampowered.com/app/440) with priority "Above Normal".  
+If you're on 64-bit Windows, use `-gameExe tf_win64.exe` instead.
 5. Optionally, rename the shortcut and give it a proper icon.
 6. Select "OK".
 7. **You're done!**

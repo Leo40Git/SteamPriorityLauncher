@@ -5,16 +5,17 @@
 
 #define _WIN32_WINNT 0x501 // Windows XP
 #define WIN32_LEAN_AND_MEAN
-#include "Windows.h"
-#include "atlstr.h"
-#include "shellapi.h"
-#include "TlHelp32.h"
-#include "Psapi.h"
+#include <Windows.h>
+#include <atlstr.h>
+#include <shellapi.h>
+#include <TlHelp32.h>
+#include <Psapi.h>
+#include <inttypes.h>
 
-constexpr auto VERSION = "1.3";
+#define SPL_VERSION "1.4"
 
-constexpr auto PRI_COUNT = 6;
-constexpr auto PRI_DEFAULT = 3; // A (Above Normal)
+constexpr int32_t PRI_COUNT = 6;
+constexpr int32_t PRI_DEFAULT = 3; // A (Above Normal)
 const char* PRI_NAMES[] = { "L", "B", "N", "A", "H", "R" };
 const char* PRI_DETAILS[] = { "Low/Idle*", "Below Normal*", "Normal", "Above Normal", "High*", "Realtime* (requires admin privileges, may cause system instability!)" };
 const DWORD PRI_VALUES[] = { IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS, ABOVE_NORMAL_PRIORITY_CLASS, HIGH_PRIORITY_CLASS, REALTIME_PRIORITY_CLASS };
@@ -24,6 +25,11 @@ HWND hwndCon;
 enum ParseState {
 	Default, NextIsPriValue, NextIsGameID, NextIsGameExe, NextIsAffinity
 };
+
+void pauseBeforeExit() {
+	printf("press any key to exit . . . ");
+	(void)getchar();
+}
 
 void notifyError() {
 	MessageBeep(MB_ICONERROR);
@@ -54,15 +60,14 @@ void printError(const char* errSrc, DWORD err) {
 		printf("ERROR: %s, error code 0x%X\n", errSrc, err);
 		printf("additionally, FormatMessageA failed, error code 0x%X\n", fmtMsgErr);
 	}
-	printf("press any key to exit...\n");
-	system("pause>nul");
 	LocalFree(errMsg);
+	pauseBeforeExit();
 }
 
 int main(int argc, char* argv[])
 {
-	printf("SteamPriorityLauncher v%s by ADudeCalledLeo/Leo40Git\n", VERSION);
-	printf("built on %s at %s\n", __DATE__, __TIME__);
+	printf("SteamPriorityLauncher v" SPL_VERSION " by ADudeCalledLeo (aka Leo40Git)\n");
+	printf("built on " __DATE__ " at " __TIME__ "\n");
 	printf("https://github.com/Leo40Git/SteamPriorityWrapper\n");
 	printf("\n");
 
@@ -81,7 +86,7 @@ int main(int argc, char* argv[])
 		if (!GetProcessAffinityMask(GetCurrentProcess(), &useless, &affMaskSystem)) {
 			DWORD err = GetLastError();
 			printError("GetProcessAffinityMask failed", err);
-			return -1;
+			return EXIT_FAILURE;
 		}
 	}
 	if (argc == 1) {
@@ -98,7 +103,7 @@ int main(int argc, char* argv[])
 		printf("If you have more than 64 cores, each entry defines a group of cores, rather than one.\n");
 		printf("(but let's be real, if you have a machine with >64 cores, it's probably not for gaming)\n");
 		printf("If you don't know what affinity is, you probably don't need to set it.\n");
-		return 0;
+		return EXIT_SUCCESS;
 	}
 
 	ParseState ps = Default;
@@ -116,9 +121,8 @@ int main(int argc, char* argv[])
 			if (ps == Default)
 				break;
 			printf("ERROR: unknown priority \"%s\"\n", argv[i]);
-			printf("press any key to exit...\n");
-			system("pause>nul");
-			ExitProcess(-1);
+			pauseBeforeExit();
+			return EXIT_FAILURE;
 		case NextIsGameID:
 			gameIDSet = true;
 			ZeroMemory(gameID, sizeof(gameID));
@@ -154,9 +158,10 @@ int main(int argc, char* argv[])
 				size_t maxBits = sizeof(DWORD_PTR) * 8; // This will be 32 on 32-bit and 64 on 64-bit systems
 
 				DWORD_PTR affBit = strtoul(ptr, NULL, 10);
-				affMask |= 1 << affBit;
+				affMask |= static_cast<DWORD_PTR>(1) << affBit;
 #ifdef DEBUG
-				printf("affMask = 0x%X\n", affMask);
+				printf("affMask = 0x%" PRIXPTR "\n", affMask);
+				
 #endif
 				ptr = strtok_s(NULL, ";", &ptr_next);
 			}
@@ -196,25 +201,22 @@ int main(int argc, char* argv[])
 		notifyError();
 		printf("ERROR: game ID not set!\n");
 		printf("please specify the -gameID option.\n");
-		printf("press any key to exit...\n");
-		system("pause>nul");
-		return -1;
+		pauseBeforeExit();
+		return EXIT_FAILURE;
 	}
 	if (!gameExeSet) {
 		notifyError();
 		printf("ERROR: game EXE name not set!\n");
 		printf("please specify the -gameExe option.\n");
-		printf("press any key to exit...\n");
-		system("pause>nul");
-		return -1;
+		pauseBeforeExit();
+		return EXIT_FAILURE;
 	}
 	// also quit if we somehow got an affinity mask that specifies 0 cores
 	if (affMaskSet && affMask == 0) {
 		notifyError();
 		printf("ERROR: -affinity specified with no cores!\n");
-		printf("press any key to exit...\n");
-		system("pause>nul");
-		return -1;
+		pauseBeforeExit();
+		return EXIT_FAILURE;
 	}
 
 	// create steam browser protocol command
@@ -225,7 +227,7 @@ int main(int argc, char* argv[])
 	int errcode = 0;
 	if ((errcode = (int)ShellExecuteA(NULL, "open", steamCmd, NULL, NULL, SW_SHOW)) <= 32) {
 		printError("ShellExecuteA failed", errcode);
-		return -1;
+		return EXIT_FAILURE;
 	}
 
 	printf("SteamPriorityLauncher will now wait for a process of \"%s\" to launch.\n", gameExe);
@@ -258,7 +260,7 @@ int main(int argc, char* argv[])
 		if (!hSnap) {
 			DWORD err = GetLastError();
 			printError("CreateToolhelp32Snapshot failed; could not get a snapshot of all processes", err);
-			return -1;
+			return EXIT_FAILURE;
 		}
 
 		// loop through and grab the matching EXE
@@ -296,7 +298,7 @@ int main(int argc, char* argv[])
 		DWORD err = GetLastError();
 		printError("SetPriorityClass failed", err);
 		CloseHandle(hGameProc);
-		return -1;
+		return EXIT_FAILURE;
 	}
 
 	// oh, and set affinity too I guess
@@ -305,17 +307,17 @@ int main(int argc, char* argv[])
 			DWORD err = GetLastError();
 			printError("SetProcessAffinityMask failed", err);
 			CloseHandle(hGameProc);
-			return -1;
+			return EXIT_FAILURE;
 		}
 	}
 
 	CloseHandle(hGameProc);
 
-	printf("Successfully set process attributes.\n");
+	printf("successfully set process attributes!\n");
+
 #ifdef DEBUG
-	printf("press any key to exit...\n");
-	system("pause>nul");
+	pauseBeforeExit();
 #endif
 
-	return 0;
+	return EXIT_SUCCESS;
 }
